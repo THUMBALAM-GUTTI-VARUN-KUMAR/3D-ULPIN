@@ -20,6 +20,7 @@ import {
   BuildingAnnotationColor,
   useBuildingAnnotationStore,
 } from "@/state/buildingAnnotationStore";
+import { useLayerStore } from "@/state/layerStore";
 
 const SCALE = 51000;
 
@@ -130,6 +131,11 @@ function Building({
   const toggleHidden = useHiddenStore((s) => s.toggleHidden);
   const selectedBuildingId = useHiddenStore((s) => s.selectedBuildingId);
   const selectBuilding = useHiddenStore((s) => s.selectBuilding);
+  const setSelectedBuilding = useLayerStore((s) => s.setSelectedBuilding);
+  const updateSelectedFloors = useLayerStore((s) => s.updateSelectedFloors);
+  const updateSelectedDbInfo = useLayerStore((s) => s.updateSelectedDbInfo);
+  const showLabels = useLayerStore((s) => s.showLabels);
+
   const annotation = useBuildingAnnotationStore(
     (s) => s.annotations[buildingId]
   );
@@ -144,10 +150,29 @@ function Building({
   const handleBuildingClick = async () => {
     const nextSelected = !selected;
     selectBuilding(nextSelected ? buildingId : null);
-    if (!nextSelected) return;
+    if (!nextSelected) {
+      setSelectedBuilding(null);
+      return;
+    }
+
+    const baseUlpin = generateBaseUlpin(rawCenter.lat, rawCenter.lng);
+    const flagged = checkHeightFloorMismatch(
+      extrudeSettings.depth,
+      floorCount
+    );
+
+    setSelectedBuilding({
+      buildingId,
+      osmId: buildingId,
+      tags,
+      height: extrudeSettings.depth,
+      floorCount,
+      rawCenter,
+      baseUlpin,
+      isFlagged: flagged,
+    });
 
     setLoadingFloors(true);
-    const baseUlpin = generateBaseUlpin(rawCenter.lat, rawCenter.lng);
 
     const parcel = await getOrCreateParcel(
       baseUlpin,
@@ -174,10 +199,12 @@ function Building({
         parcelId: parcel.id,
         baseUlpin,
       });
-      const flagged = checkHeightFloorMismatch(
-        extrudeSettings.depth,
-        floorCount
-      );
+      updateSelectedDbInfo({
+        dbBuildingId: building.id,
+        parcelId: parcel.id,
+        baseUlpin,
+      });
+
       const floorRows = await getOrCreateFloors(
         building.id,
         baseUlpin,
@@ -185,6 +212,7 @@ function Building({
         flagged
       );
       setFloors(floorRows);
+      updateSelectedFloors(floorRows, flagged);
     }
     setLoadingFloors(false);
   };
@@ -207,6 +235,7 @@ function Building({
     setShowTranslations(false);
     setShowAnnotationForm(false);
     selectBuilding(null);
+    setSelectedBuilding(null);
   };
 
   const openAnnotationEditor = () => {
@@ -220,7 +249,7 @@ function Building({
 
   return (
     <>
-      {annotation && (
+      {annotation && showLabels && (
         <group position={markerPosition}>
           <mesh position={[0, 4, 0]}>
             <cylinderGeometry args={[0.04, 0.04, 8, 12]} />
@@ -260,729 +289,62 @@ function Building({
           </Html>
         </group>
       )}
+
       <mesh
-      onPointerOver={(e) => {
-        setHovered(true);
-        e.stopPropagation();
-      }}
-      onPointerOut={(e) => {
-        setHovered(false);
-        e.stopPropagation();
-      }}
-      onPointerMove={(e) => {
-        setHoverPos(e.point.clone());
-        e.stopPropagation();
-      }}
-      onClick={(e) => {
-        handleBuildingClick();
-        e.stopPropagation();
-      }}
-      onContextMenu={(e) => {
-        e.nativeEvent.preventDefault();
-        setHoverPos(e.point.clone());
-        selectBuilding(buildingId);
-        openAnnotationEditor();
-        e.stopPropagation();
-      }}
-      rotation={[-Math.PI / 2, 0, 0]}
-      userData={{ exportToGLB: true }}
-    >
-      <extrudeGeometry args={[shape, extrudeSettings]} />
-      <meshStandardMaterial color={displayColor} />
-      {(hovered || selected) && hoverPos && (
-        <Html
-          position={[
-            hoverPos.x,
-            hoverPos.y + extrudeSettings.depth + 0.5,
-            hoverPos.z,
-          ]}
-          center
-        >
-          <div
-            role="dialog"
-            aria-label={tags.name || "Building Information"}
-            style={{
-              color: "#000000",
-              backgroundColor: "#ffffff96",
-              backdropFilter: "blur(8px)",
-              border: "none",
-              padding: "14px",
-              borderRadius: "10px",
-              fontFamily: "Inter, system-ui, sans-serif",
-              fontSize: "13px",
-              width: "220px",
-              boxShadow: "0 2px 14px rgba(0, 0, 0, 0.16)",
-              transition: "all 0.2s ease-in-out",
-              position: "relative",
-            }}
-          >
-            {/* Title */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "10px",
-                fontWeight: "600",
-                fontSize: "15px",
-                borderBottom: tags.name
-                  ? "1px solid rgba(0, 0, 0, 0.08)"
-                  : "none",
-                paddingBottom: tags.name ? "6px" : "0",
-                marginBottom: tags.name ? "8px" : "4px",
-              }}
-            >
-              <span>{tags.name || "Building Information"}</span>
-              <button
-                type="button"
-                aria-label="Close building information"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closePopup();
-                }}
-                style={{
-                  width: "24px",
-                  height: "24px",
-                  flex: "0 0 24px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  border: "1px solid rgba(0, 0, 0, 0.08)",
-                  borderRadius: "6px",
-                  backgroundColor: "rgba(255, 255, 255, 0.72)",
-                  color: "#5f6368",
-                  cursor: "pointer",
-                  fontSize: "16px",
-                  lineHeight: "1",
-                  padding: "0",
-                  transition: "background-color 0.15s ease, color 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  const target = e.currentTarget;
-                  target.style.backgroundColor = "rgba(17, 24, 39, 0.06)";
-                  target.style.color = "#111827";
-                }}
-                onMouseLeave={(e) => {
-                  const target = e.currentTarget;
-                  target.style.backgroundColor = "rgba(255, 255, 255, 0.72)";
-                  target.style.color = "#5f6368";
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {showAnnotationForm && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-
-                  const title = annotationTitle.trim();
-                  const notes = annotationNotes.trim();
-                  if (!title) return;
-
-                  upsertAnnotation({
-                    buildingId,
-                    title,
-                    notes,
-                    color: annotationColor,
-                  });
-                  setShowAnnotationForm(false);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  display: "grid",
-                  gap: "8px",
-                  marginBottom: "10px",
-                  paddingBottom: "10px",
-                  borderBottom: "1px solid rgba(0, 0, 0, 0.08)",
-                }}
-              >
-                <input
-                  value={annotationTitle}
-                  onChange={(e) => setAnnotationTitle(e.target.value)}
-                  placeholder="Title"
-                  maxLength={48}
-                  style={{
-                    width: "100%",
-                    border: "1px solid rgba(17, 24, 39, 0.12)",
-                    borderRadius: "6px",
-                    padding: "7px 8px",
-                    backgroundColor: "rgba(255, 255, 255, 0.82)",
-                    color: "#111827",
-                    fontSize: "12px",
-                    outline: "none",
-                  }}
-                />
-                <textarea
-                  value={annotationNotes}
-                  onChange={(e) => setAnnotationNotes(e.target.value)}
-                  placeholder="Notes"
-                  rows={3}
-                  maxLength={220}
-                  style={{
-                    width: "100%",
-                    resize: "vertical",
-                    border: "1px solid rgba(17, 24, 39, 0.12)",
-                    borderRadius: "6px",
-                    padding: "7px 8px",
-                    backgroundColor: "rgba(255, 255, 255, 0.82)",
-                    color: "#111827",
-                    fontSize: "12px",
-                    outline: "none",
-                  }}
-                />
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "6px",
-                    alignItems: "center",
-                  }}
-                >
-                  {Object.entries(ANNOTATION_COLORS).map(([key, color]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      aria-label={`Use ${key} marker`}
-                      onClick={() =>
-                        setAnnotationColor(key as BuildingAnnotationColor)
-                      }
-                      style={{
-                        width: "22px",
-                        height: "22px",
-                        borderRadius: "999px",
-                        border:
-                          annotationColor === key
-                            ? "2px solid #111827"
-                            : "1px solid rgba(17, 24, 39, 0.16)",
-                        backgroundColor: color,
-                        cursor: "pointer",
-                        padding: 0,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "8px",
-                  }}
-                >
-                  {annotation && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        removeAnnotation(buildingId);
-                        setShowAnnotationForm(false);
-                      }}
-                      style={{
-                        border: "none",
-                        backgroundColor: "transparent",
-                        color: "#ef4444",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        padding: "6px 0",
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "6px",
-                      marginLeft: "auto",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setShowAnnotationForm(false)}
-                      style={{
-                        border: "1px solid rgba(17, 24, 39, 0.12)",
-                        borderRadius: "6px",
-                        backgroundColor: "rgba(255, 255, 255, 0.72)",
-                        color: "#374151",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        padding: "6px 9px",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!annotationTitle.trim()}
-                      style={{
-                        border: "1px solid rgba(37, 99, 235, 0.18)",
-                        borderRadius: "6px",
-                        backgroundColor: annotationTitle.trim()
-                          ? "#2563eb"
-                          : "rgba(148, 163, 184, 0.42)",
-                        color: "#ffffff",
-                        cursor: annotationTitle.trim()
-                          ? "pointer"
-                          : "not-allowed",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        padding: "6px 10px",
-                      }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
-
-            {annotation && !showAnnotationForm && (
-              <div
-                style={{
-                  marginBottom: "10px",
-                  paddingBottom: "10px",
-                  borderBottom: "1px solid rgba(0, 0, 0, 0.08)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "8px",
-                    marginBottom: annotation.notes ? "6px" : "0",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      minWidth: 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        flex: "0 0 8px",
-                        borderRadius: "999px",
-                        backgroundColor: ANNOTATION_COLORS[annotation.color],
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {annotation.title}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openAnnotationEditor();
-                    }}
-                    style={{
-                      border: "none",
-                      backgroundColor: "transparent",
-                      color: "#2563eb",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      padding: "2px 0",
-                    }}
-                  >
-                    Edit
-                  </button>
-                </div>
-                {annotation.notes && (
-                  <div
-                    style={{
-                      color: "#5f6368",
-                      fontSize: "12px",
-                      lineHeight: 1.45,
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {annotation.notes}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Core info or No Data */}
-            {hasAnyData ? (
-              <>
-                {[
-                  "building",
-                  "height",
-                  "building:levels",
-                  "amenity",
-                  "denomination",
-                ].map(
-                  (key) =>
-                    tags[key] &&
-                    (key !== "building" || tags[key] !== "yes") && (
-                      <InfoRow
-                        key={key}
-                        label={formatLabel(key)}
-                        value={
-                          key === "height"
-                            ? `${tags[key]} m`
-                            : String(tags[key])
-                        }
-                      />
-                    )
-                )}
-
-                {/* Address block */}
-                {[
-                  "addr:street",
-                  "addr:housenumber",
-                  "addr:district",
-                  "addr:city",
-                  "addr:postcode",
-                ].some((key) => tags[key]) && (
-                  <div
-                    style={{
-                      margin: "10px 0 8px",
-                      borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                      paddingTop: "8px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: "500",
-                        marginBottom: "4px",
-                        color: "#5f6368",
-                      }}
-                    >
-                      Address
-                    </div>
-                    <div
-                      style={{
-                        marginLeft: "4px",
-                        fontSize: "12px",
-                        color: "#5f6368",
-                      }}
-                    >
-                      {[
-                        [tags["addr:street"], tags["addr:housenumber"]]
-                          .filter(Boolean)
-                          .join(" "),
-                        tags["addr:district"],
-                        tags["addr:city"],
-                        tags["addr:postcode"],
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div
-                style={{
-                  color: "#8f8f96",
-                  fontSize: "12px",
-                  textAlign: "center",
-                  padding: "6px 0",
-                }}
-              >
-                No data available
-              </div>
-            )}
-
-            {/* Database identifiers */}
-            {buildingInfo && (
-              <div
-                style={{
-                  margin: "10px 0 2px",
-                  borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                  paddingTop: "8px",
-                  fontSize: "11px",
-                  color: "#5f6368",
-                  fontFamily: "monospace",
-                  lineHeight: 1.6,
-                }}
-              >
-                <div>DB Building ID: {buildingInfo.dbId}</div>
-                <div>OSM ID: {buildingInfo.osmId}</div>
-                <div>Parcel ID: {buildingInfo.parcelId}</div>
-                <div>Base ULPIN: {buildingInfo.baseUlpin}</div>
-              </div>
-            )}
-
-            {/* Floor ULPINs */}
-            {(loadingFloors || floors.length > 0) && (
-              <div
-                style={{
-                  margin: "10px 0 8px",
-                  borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                  paddingTop: "8px",
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: "500",
-                    marginBottom: "4px",
-                    color: "#5f6368",
-                  }}
-                >
-                  Floor IDs
-                </div>
-                {loadingFloors ? (
-                  <div style={{ fontSize: "12px", color: "#8f8f96" }}>
-                    Generating floor ULPINs...
-                  </div>
-                ) : (
-                  <div style={{ maxHeight: "120px", overflowY: "auto" }}>
-                    {floors[0]?.flag && (
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#b45309",
-                          backgroundColor: "rgba(245, 158, 11, 0.1)",
-                          border: "1px solid rgba(245, 158, 11, 0.3)",
-                          borderRadius: "4px",
-                          padding: "4px 6px",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        ⚠ Height and floor count don't closely match —
-                        flagged for review
-                      </div>
-                    )}
-                    {floors
-                      .slice()
-                      .sort((a, b) => a.floor_number - b.floor_number)
-                      .map((f) => (
-                        <div
-                          key={f.floor_number}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: "8px",
-                            fontSize: "11px",
-                            fontFamily: "monospace",
-                            margin: "2px 0",
-                          }}
-                        >
-                          <span>Floor {f.floor_number}</span>
-                          <span>{f.floor_ulpin}</span>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Additional Info toggle */}
-            {Object.entries(tags).filter(
-              ([key]) =>
-                ![
-                  "building",
-                  "name",
-                  "height",
-                  "building:levels",
-                  "source",
-                  "amenity",
-                  "denomination",
-                ].includes(key) &&
-                !key.startsWith("addr:") &&
-                !key.startsWith("name:") &&
-                !key.startsWith("alt_name:")
-            ).length > 0 && (
-              <div
-                style={{
-                  margin: "10px 0 4px",
-                  borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                  paddingTop: "8px",
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: "500",
-                    marginBottom: "4px",
-                    color: "#5f6368",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAdditionalInfo(!showAdditionalInfo);
-                  }}
-                >
-                  Additional Information
-                  <span>{showAdditionalInfo ? "▲" : "▼"}</span>
-                </div>
-                {showAdditionalInfo && (
-                  <div>
-                    {Object.entries(tags)
-                      .filter(
-                        ([key]) =>
-                          ![
-                            "building",
-                            "name",
-                            "height",
-                            "building:levels",
-                            "source",
-                            "amenity",
-                            "denomination",
-                          ].includes(key) &&
-                          !key.startsWith("addr:") &&
-                          !key.startsWith("name:") &&
-                          !key.startsWith("alt_name:")
-                      )
-                      .map(([key, value]) => {
-                        if (
-                          key === "description" ||
-                          (typeof value === "string" && value.length > 80)
-                        ) {
-                          return (
-                            <div key={key} style={{ margin: "8px 0" }}>
-                              <div
-                                style={{
-                                  fontWeight: "500",
-                                  color: "#5f6368",
-                                  marginBottom: "4px",
-                                }}
-                              >
-                                {formatLabel(key)}
-                              </div>
-                              <div
-                                style={{
-                                  textAlign: "left",
-                                  fontSize: "12px",
-                                  color: "#5f6368",
-                                  fontWeight: "400",
-                                  whiteSpace: "pre-wrap",
-                                  lineHeight: "1.4",
-                                  backgroundColor: "rgba(0,0,0,0.02)",
-                                  padding: "6px 8px",
-                                  borderRadius: "4px",
-                                }}
-                              >
-                                {String(value)}
-                              </div>
-                            </div>
-                          );
-                        }
-                        return (
-                          <InfoRow
-                            key={key}
-                            label={formatLabel(key)}
-                            value={String(value)}
-                          />
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Translations toggle */}
-            {Object.entries(tags).filter(([key]) => key.startsWith("name:"))
-              .length > 0 && (
-              <div
-                style={{
-                  margin: "10px 0 4px",
-                  borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                  paddingTop: "8px",
-                  textAlign: "right",
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: "500",
-                    marginBottom: "4px",
-                    color: "#5f6368",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTranslations(!showTranslations);
-                  }}
-                >
-                  Name Translations
-                  <span>{showTranslations ? "▲" : "▼"}</span>
-                </div>
-                {showTranslations && (
-                  <div>
-                    {Object.entries(tags)
-                      .filter(([key]) => key.startsWith("name:"))
-                      .map(([key, value]) => (
-                        <InfoRow
-                          key={key}
-                          label={key.replace("name:", "").toUpperCase()}
-                          value={String(value)}
-                        />
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Cut Building Button ── */}
-            <div
-              style={{
-                marginTop: "10px",
-                borderTop: "1px solid rgba(0, 0, 0, 0.08)",
-                paddingTop: "8px",
-              }}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closePopup();
-                  toggleHidden(buildingId);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                style={{
-                  width: "100%",
-                  padding: "6px 10px",
-                  backgroundColor: "rgba(239, 68, 68, 0.08)",
-                  color: "#ef4444",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "500",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  fontFamily: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLButtonElement).style.backgroundColor =
-                    "rgba(239, 68, 68, 0.15)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLButtonElement).style.backgroundColor =
-                    "rgba(239, 68, 68, 0.08)";
-                }}
-              >
-                ✂ Cut Building
-              </button>
-            </div>
-          </div>
-        </Html>
-      )}
+        onPointerOver={(e) => {
+          setHovered(true);
+          e.stopPropagation();
+        }}
+        onPointerOut={(e) => {
+          setHovered(false);
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          handleBuildingClick();
+          e.stopPropagation();
+        }}
+        rotation={[-Math.PI / 2, 0, 0]}
+        userData={{ exportToGLB: true }}
+      >
+        <extrudeGeometry args={[shape, extrudeSettings]} />
+        <meshStandardMaterial
+          color={displayColor}
+          transparent={selected && useLayerStore.getState().isolatedFloor !== null}
+          opacity={selected && useLayerStore.getState().isolatedFloor !== null ? 0.35 : 1.0}
+          roughness={0.4}
+          metalness={0.1}
+        />
       </mesh>
+
+      {/* 3D Isolated Floor Highlight */}
+      {selected && useLayerStore.getState().isolatedFloor !== null && (
+        <mesh
+          position={[
+            0,
+            (useLayerStore.getState().isolatedFloor ?? 0) *
+              (extrudeSettings.depth / Math.max(1, floorCount)),
+            0,
+          ]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <extrudeGeometry
+            args={[
+              shape,
+              {
+                steps: 1,
+                depth: extrudeSettings.depth / Math.max(1, floorCount),
+                bevelEnabled: false,
+              },
+            ]}
+          />
+          <meshStandardMaterial
+            color="#2563eb"
+            emissive="#1d4ed8"
+            emissiveIntensity={0.5}
+            roughness={0.2}
+          />
+        </mesh>
+      )}
     </>
   );
 }
@@ -1043,8 +405,9 @@ function Roads({
   area: { lat: number; lng: number }[] | undefined;
 }) {
   const [roads, setRoads] = useState<RoadElement[]>([]);
+  const showRoads = useLayerStore((s) => s.showRoads);
 
-  if (!area || area.length < 2) return null;
+  if (!area || area.length < 2 || !showRoads) return null;
 
   const refLat = (area[1].lat + area[0].lat) / 2;
   const refLng = (area[1].lng + area[0].lng) / 2;
@@ -1177,6 +540,7 @@ export function Export() {
 export function Space() {
   const areas = useAreaStore((state) => state.areas);
   const hiddenIds = useHiddenStore((s) => s.hiddenIds);
+  const showBuildings = useLayerStore((s) => s.showBuildings);
   const [realCenter, setRealCenter] = useState<
     { lat: number; lng: number }[] | undefined
   >();
@@ -1259,20 +623,21 @@ export function Space() {
         intensity={Math.PI}
       />
 
-      {buildingsData.map((item) =>
-        hiddenIds.has(item.buildingId) ? null : (
-          <Building
-            key={item.buildingId}
-            shape={item.shape}
-            extrudeSettings={item.extrudeSettings}
-            tags={item.tags}
-            buildingId={item.buildingId}
-            markerPosition={item.markerPosition}
-            rawCenter={item.rawCenter}
-            floorCount={item.floorCount}
-          />
-        )
-      )}
+      {showBuildings &&
+        buildingsData.map((item) =>
+          hiddenIds.has(item.buildingId) ? null : (
+            <Building
+              key={item.buildingId}
+              shape={item.shape}
+              extrudeSettings={item.extrudeSettings}
+              tags={item.tags}
+              buildingId={item.buildingId}
+              markerPosition={item.markerPosition}
+              rawCenter={item.rawCenter}
+              floorCount={item.floorCount}
+            />
+          )
+        )}
 
       <Roads area={realCenter} />
       <pointLight

@@ -1,256 +1,304 @@
-import { useCarStore } from "@/state/carStore";
-import {
-  ACCENT_BLUE,
-  BORDER_COLOR,
-  BLUR_GLASS,
-  SHADOW_GLASS,
-  TEXT_PRIMARY,
-  TEXT_SECONDARY,
-} from "@/theme/color";
+﻿import React, { useState } from "react";
 import { css } from "@emotion/react";
-import { DetailedHTMLProps, ButtonHTMLAttributes } from "react";
 import {
+  Layers3,
   CarFront,
   RotateCcw,
-  Layers3,
-  Sparkles,
-  SquareDashedMousePointer,
-  Video,
+  Download,
+  Search,
+  SlidersHorizontal,
+  User,
+  MapPin,
+  HelpCircle,
+  Eye,
+  CheckCircle2,
 } from "lucide-react";
+import {
+  ACCENT_PRIMARY,
+  BORDER_COLOR,
+  TEXT_PRIMARY,
+  TEXT_SECONDARY,
+  TEXT_MUTED,
+  BG_PANEL,
+  BG_PANEL_ALT,
+  BG_SURFACE_HOVER,
+  SHADOW_SM,
+  RADIUS_SM,
+  RADIUS_MD,
+} from "@/theme/color";
+import { useCarStore } from "@/state/carStore";
+import { useActionStore } from "@/state/exportStore";
+import { useLayerStore } from "@/state/layerStore";
 
-const TOP_PANEL_HEIGHT = "3rem";
-
-const breakpoints = [768];
-const mq = breakpoints.map((bp) => `@media (max-width: ${bp}px)`);
-
-interface NavButtonProps
-  extends DetailedHTMLProps<
-    ButtonHTMLAttributes<HTMLButtonElement>,
-    HTMLButtonElement
-  > {
-  isShow?: boolean;
-}
-
-export function TopNav({
-  step,
-  onResetDemo,
-}: {
+interface TopNavProps {
   step: number;
   onResetDemo?: () => void;
-}) {
+  onSearchSubmit?: (query: string) => void;
+  onToggleView?: () => void;
+  isExporting?: boolean;
+}
+
+export const TopNav: React.FC<TopNavProps> = ({
+  step,
+  onResetDemo,
+  onSearchSubmit,
+  onToggleView,
+}) => {
+  const [searchQuery, setSearchQuery] = useState("");
   const setThirdMode = useCarStore((state) => state.setThirdMode);
   const thirdMode = useCarStore((state) => state.thirdMode);
-  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  const setExportType = useActionStore((state) => state.setExportType);
+
+  const handleExportGLB = () => {
+    setExportType("glb");
+    window.VPMSExportModel?.("glb");
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim() && onSearchSubmit) {
+      onSearchSubmit(searchQuery.trim());
+    }
+  };
 
   return (
-    <div
+    <header
       css={css({
-        display: "flex",
-        transition: "all 0.3s ease",
         position: "fixed",
         top: 0,
         left: 0,
         width: "100%",
-        minHeight: TOP_PANEL_HEIGHT,
-        padding: "0.75rem 1rem",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.94), rgba(247,249,253,0.78))",
-        backdropFilter: BLUR_GLASS,
+        height: "3.25rem",
+        backgroundColor: BG_PANEL,
         borderBottom: `1px solid ${BORDER_COLOR}`,
-        boxShadow: SHADOW_GLASS,
-        zIndex: 9999,
-        justifyContent: "space-between",
+        boxShadow: SHADOW_SM,
+        zIndex: 100,
+        display: "flex",
         alignItems: "center",
-        gap: "1rem",
+        justifyContent: "space-between",
+        padding: "0 1rem",
+        userSelect: "none",
       })}
     >
-      <div
-        css={css({
-          alignItems: "center",
-          flexDirection: "row",
-          display: "flex",
-          gap: "0.85rem",
-          minWidth: 0,
-        })}
-      >
+      {/* Brand / Logo */}
+      <div css={css({ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: "260px" })}>
         <div
           css={css({
-            width: "2.35rem",
-            height: "2.35rem",
-            borderRadius: "14px",
+            width: "2.1rem",
+            height: "2.1rem",
+            borderRadius: RADIUS_SM,
+            backgroundColor: "#1e3a8a",
             display: "grid",
             placeItems: "center",
-            background:
-              "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(20,184,166,0.14))",
-            border: `1px solid ${BORDER_COLOR}`,
-            color: ACCENT_BLUE,
+            color: "#ffffff",
             flexShrink: 0,
+            boxShadow: "0 2px 4px rgba(30, 58, 138, 0.2)",
           })}
         >
-          <Layers3 size={18} />
+          <Layers3 size={16} />
         </div>
 
-        <div css={css({ minWidth: 0 })}>
+        <div>
           <div
             css={css({
-              fontFamily: '"Space Grotesk", "Manrope", sans-serif',
-              fontSize: "15px",
-              fontWeight: 700,
+              fontSize: "14px",
+              fontWeight: 800,
               color: TEXT_PRIMARY,
               lineHeight: 1.1,
+              letterSpacing: "-0.01em",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.35rem",
             })}
           >
-            VPMS
+            3D ULPIN
+            <span
+              css={css({
+                fontSize: "9px",
+                padding: "0.1rem 0.35rem",
+                borderRadius: "3px",
+                backgroundColor: "rgba(37, 99, 235, 0.1)",
+                color: ACCENT_PRIMARY,
+                fontWeight: 700,
+              })}
+            >
+              GIS v2.0
+            </span>
           </div>
           <div
             css={css({
-              fontSize: "11px",
-              color: TEXT_SECONDARY,
-              marginTop: "0.15rem",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
+              fontSize: "10px",
+              fontWeight: 500,
+              color: TEXT_MUTED,
+              lineHeight: 1.2,
             })}
           >
-            Select, process, and export 3D city data
+            Vertical Property Mapping System
           </div>
         </div>
+      </div>
 
-        <div
+      {/* Global Search Bar */}
+      <form
+        onSubmit={handleSearchSubmit}
+        css={css({
+          flex: 1,
+          maxWidth: "420px",
+          position: "relative",
+          margin: "0 1rem",
+        })}
+      >
+        <Search
+          size={14}
+          color={TEXT_MUTED}
+          css={css({
+            position: "absolute",
+            left: "0.75rem",
+            top: "50%",
+            transform: "translateY(-50%)",
+            pointerEvents: "none",
+          })}
+        />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search location, ULPIN, Parcel ID, or OSM ID..."
+          css={css({
+            width: "100%",
+            height: "2.1rem",
+            padding: "0 0.75rem 0 2.2rem",
+            borderRadius: RADIUS_SM,
+            border: `1px solid ${BORDER_COLOR}`,
+            backgroundColor: BG_PANEL_ALT,
+            fontSize: "12px",
+            color: TEXT_PRIMARY,
+            outline: "none",
+            transition: "all 0.15s ease",
+            ":focus": {
+              backgroundColor: BG_PANEL,
+              borderColor: ACCENT_PRIMARY,
+              boxShadow: "0 0 0 2px rgba(37, 99, 235, 0.15)",
+            },
+          })}
+        />
+      </form>
+
+      {/* Right Controls / Actions */}
+      <div css={css({ display: "flex", alignItems: "center", gap: "0.5rem" })}>
+        {/* Step / Mode Indicator */}
+        <button
+          onClick={onToggleView}
+          title="Toggle 2D Selector / 3D Cadastre"
           css={css({
             display: "flex",
             alignItems: "center",
-            gap: "0.5rem",
-            marginLeft: "0.5rem",
-            [mq[0]]: { display: "none" },
+            gap: "0.4rem",
+            padding: "0.4rem 0.75rem",
+            borderRadius: RADIUS_SM,
+            border: `1px solid ${BORDER_COLOR}`,
+            backgroundColor: BG_PANEL_ALT,
+            color: TEXT_PRIMARY,
+            fontSize: "11px",
+            fontWeight: 700,
+            cursor: "pointer",
+            ":hover": {
+              backgroundColor: BG_SURFACE_HOVER,
+            },
           })}
         >
-          {[
-            { label: "Select", icon: Sparkles },
-            { label: "Process", icon: Video },
-            { label: "View", icon: SquareDashedMousePointer },
-          ].map((item, i) => (
-            <div
-              key={item.label}
-              css={css({
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.45rem 0.7rem",
-                borderRadius: "999px",
-                backgroundColor:
-                  i <= step ? "rgba(37, 99, 235, 0.08)" : "transparent",
-              })}
-            >
-              <div
-                css={css({
-                  width: "1.15rem",
-                  height: "1.15rem",
-                  borderRadius: "999px",
-                  backgroundColor:
-                    i <= step ? ACCENT_BLUE : "rgba(148, 163, 184, 0.28)",
-                  display: "grid",
-                  placeItems: "center",
-                  color: "#fff",
-                  boxShadow:
-                    i === step ? `0 0 0 4px rgba(37,99,235,0.12)` : "none",
-                })}
-              />
-              <span
-                css={css({
-                  fontSize: "12px",
-                  fontWeight: i === step ? "700" : "500",
-                  color: i === step ? TEXT_PRIMARY : TEXT_SECONDARY,
-                })}
-              >
-                {item.label}
-              </span>
-              {i < 2 && (
-                <div
-                  css={css({
-                    width: "14px",
-                    height: "1px",
-                    backgroundColor:
-                      i < step
-                        ? "rgba(37, 99, 235, 0.35)"
-                        : "rgba(15, 23, 42, 0.08)",
-                  })}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+          <span
+            css={css({
+              width: "7px",
+              height: "7px",
+              borderRadius: "999px",
+              backgroundColor: step === 2 ? "#16a34a" : "#2563eb",
+            })}
+          />
+          {step === 2 ? "3D Cadastre" : "2D Selector"}
+        </button>
 
-      <div
-        css={css({
-          display: "flex",
-          flexDirection: "row",
-          gap: "0.55rem",
-          flexWrap: "wrap",
-          justifyContent: "flex-end",
-        })}
-      >
-        <NavButton isShow={true} onClick={() => onResetDemo?.()}>
-          <RotateCcw size={14} />
-          Reset Demo
-        </NavButton>
-
-        {!isMobile && (
-          <>
-            {thirdMode ? (
-              <NavButton
-                isShow={step === 2}
-                onClick={() => setThirdMode(false)}
-              >
-                <CarFront size={14} />
-                Exit Car
-              </NavButton>
-            ) : (
-              <NavButton
-                isShow={step === 2}
-                onClick={() => setThirdMode(true)}
-              >
-                <CarFront size={14} />
-                Car Mode
-              </NavButton>
-            )}
-          </>
+        {/* Car / Drive Mode */}
+        {step === 2 && (
+          <button
+            onClick={() => setThirdMode(!thirdMode)}
+            title={thirdMode ? "Exit Vehicle Drive Mode" : "Explore in Vehicle Drive Mode"}
+            css={css({
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.4rem 0.75rem",
+              borderRadius: RADIUS_SM,
+              border: `1px solid ${thirdMode ? ACCENT_PRIMARY : BORDER_COLOR}`,
+              backgroundColor: thirdMode ? "rgba(37, 99, 235, 0.1)" : BG_PANEL,
+              color: thirdMode ? ACCENT_PRIMARY : TEXT_PRIMARY,
+              fontSize: "11px",
+              fontWeight: 600,
+              cursor: "pointer",
+              ":hover": {
+                backgroundColor: thirdMode ? "rgba(37, 99, 235, 0.15)" : BG_SURFACE_HOVER,
+              },
+            })}
+          >
+            <CarFront size={14} />
+            <span>{thirdMode ? "Exit Drive" : "Drive View"}</span>
+          </button>
         )}
-      </div>
-    </div>
-  );
-}
 
-export function NavButton(props: NavButtonProps) {
-  return (
-    <button
-      css={css({
-        color: TEXT_PRIMARY,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,247,252,0.88))",
-        backdropFilter: BLUR_GLASS,
-        border: `1px solid ${BORDER_COLOR}`,
-        padding: "0.68rem 0.95rem",
-        borderRadius: "999px",
-        fontWeight: "700",
-        fontSize: "12px",
-        display: props.isShow ? "inline-flex" : "none",
-        cursor: "pointer",
-        transition:
-          "transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease",
-        alignItems: "center",
-        gap: "0.45rem",
-        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
-        ":hover": {
-          backgroundColor: "rgba(255,255,255,0.98)",
-          transform: "translateY(-1px)",
-          boxShadow: "0 16px 30px rgba(15, 23, 42, 0.12)",
-        },
-      })}
-      {...props}
-    >
-      {props.children}
-    </button>
+        {/* Export GLB */}
+        {step === 2 && (
+          <button
+            onClick={handleExportGLB}
+            title="Export 3D Model as GLTF/GLB"
+            css={css({
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.4rem 0.75rem",
+              borderRadius: RADIUS_SM,
+              border: "1px solid #1d4ed8",
+              backgroundColor: "#2563eb",
+              color: "#ffffff",
+              fontSize: "11px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 1px 2px rgba(37, 99, 235, 0.2)",
+              ":hover": {
+                backgroundColor: "#1d4ed8",
+              },
+            })}
+          >
+            <Download size={13} />
+            <span>Export GLB</span>
+          </button>
+        )}
+
+        {/* Reset Demo */}
+        <button
+          onClick={onResetDemo}
+          title="Reset View & Clear Selection"
+          css={css({
+            display: "flex",
+            alignItems: "center",
+            gap: "0.35rem",
+            padding: "0.4rem 0.65rem",
+            borderRadius: RADIUS_SM,
+            border: `1px solid ${BORDER_COLOR}`,
+            backgroundColor: BG_PANEL,
+            color: TEXT_SECONDARY,
+            fontSize: "11px",
+            fontWeight: 600,
+            cursor: "pointer",
+            ":hover": {
+              backgroundColor: BG_SURFACE_HOVER,
+              color: TEXT_PRIMARY,
+            },
+          })}
+        >
+          <RotateCcw size={13} />
+          <span>Reset</span>
+        </button>
+      </div>
+    </header>
   );
-}
+};
